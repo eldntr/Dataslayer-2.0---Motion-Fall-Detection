@@ -21,6 +21,7 @@ class CBAM(nn.Module):
             nn.Conv2d(2, 1, kernel_size=7, padding=3),
             nn.Sigmoid()
         )
+        # Sigmoid untuk menekankan pada binary klasifikasi
 
     def forward(self, x):
         # Channel Attention

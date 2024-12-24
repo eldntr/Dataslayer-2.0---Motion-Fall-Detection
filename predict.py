@@ -42,7 +42,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 # Directories
 test_directory = 'test'
-BOUNDARY_RATIO = 0.60  # Define boundary ratio
+BOUNDARY_RATIO = 0.5  # Define boundary ratio
 device = 'cpu'
 
 # Load YOLO model
@@ -55,34 +55,6 @@ data_transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
-
-class MobileNetV3Model(nn.Module):
-    def __init__(self, pretrained=True):
-        super(MobileNetV3Model, self).__init__()
-        self.mobilenet = models.mobilenet_v3_large(pretrained=pretrained)
-        num_ftrs_mobilenet = self.mobilenet.classifier[0].in_features
-        self.mobilenet.classifier = nn.Identity()  # Remove the classifier
-
-        self.classifier = nn.Sequential(
-            nn.Linear(num_ftrs_mobilenet, 512),
-            nn.BatchNorm1d(512),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(512, 2)  # Output layer for binary classification
-        )
-
-    def forward(self, x):
-        mobilenet_features = self.mobilenet(x)
-        output = self.classifier(mobilenet_features)
-        return output
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = MobileNetV3Model(pretrained=True).to(device)
-criterion = nn.CrossEntropyLoss()
-
-# Optimizer and Scheduler
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.7)
 
 # Dataset for testing
 class TestingDataset(Dataset):
@@ -114,8 +86,11 @@ testing_dataset = TestingDataset(image_dir=test_directory, transform=data_transf
 testing_loader = DataLoader(testing_dataset, batch_size=1, shuffle=False)
 
 # Load pretrained models
-model_berdiri = MobileNetV3Model(pretrained=False).to(device)
-model_tidak_berdiri = MobileNetV3Model(pretrained=False).to(device)
+from model_tidak_berdiri import MobileNetV3TidakBerdiri
+from model_berdiri import MobileNetV3Berdiri
+
+model_berdiri = MobileNetV3Berdiri(pretrained=False).to(device)
+model_tidak_berdiri = MobileNetV3TidakBerdiri(pretrained=False).to(device)
 
 # Load saved weights
 model_berdiri.load_state_dict(torch.load("mobilenetv3_berdiri_model.pth", map_location=device))
@@ -128,6 +103,8 @@ model_tidak_berdiri.eval()
 # Pipeline
 print("Starting pipeline...")
 results = []
+
+HEAD_REGION_FRACTION = 0.2
 
 for images, img_paths in tqdm(testing_loader, desc="Processing images"):
     images = images.to(device)
@@ -143,7 +120,9 @@ for images, img_paths in tqdm(testing_loader, desc="Processing images"):
     frame_width, frame_height = img.size
     boundary_y = int(BOUNDARY_RATIO * frame_height)
     is_berdiri = any(
-        int(cls) == 0 and box[1] <= boundary_y for *box, conf, cls in detections
+        int(cls) == 0
+        and (box[1] + HEAD_REGION_FRACTION * (box[3] - box[1])) <= boundary_y  # Top 20% region
+        for *box, conf, cls in detections
     )
 
     # Use the appropriate model

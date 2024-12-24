@@ -1,3 +1,4 @@
+# Import Library
 import torch
 import torch.nn as nn
 from torchvision import models
@@ -15,7 +16,7 @@ class CBAM(nn.Module):
             nn.Conv2d(channels // reduction, channels, kernel_size=1),
             nn.Sigmoid()
         )
-
+        
         # Spatial Attention Module
         self.spatial_attention = nn.Sequential(
             nn.Conv2d(2, 1, kernel_size=7, padding=3),
